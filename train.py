@@ -9,87 +9,58 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
-from hmdb51 import HMDB51
+from net import SpatialNet, TemporalNet
 from torch.utils.data import DataLoader
+from torchvision import datasets
 
 import os
 import numpy as np
+import argparse
+from preprocess import Preprocess
 
-
+# args
+parser = argparse.ArgumentParser()
+parser.add_argument('--test', dest='test', action='store_true')
+parser.set_defaults(test=False)
+args = parser.parse_args()
 
 # path
 pretrained = 'data/pretrained'
-params = '/spatial.pth'
+params_spatial = '/spatial.pth'
+params_temporal = '/temporal.pth'
 
 # hyper-params
-epochs = 10
-batch_size = 1
+epochs = 100
+batch_size = 10
 lr = 0.001
 momentum = 0.9
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 96, kernel_size=7, stride=2),
-            # nn.BatchNorm2d(96),
-            nn.ReLU(),
-            nn.MaxPool2d(3, stride=2),
-            nn.LocalResponseNorm(2),
-            nn.Conv2d(96, 256, kernel_size=5, stride=2),
-            # nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d(3, stride=2),
-            nn.LocalResponseNorm(2),
-            nn.Conv2d(256, 512, kernel_size=3),
-            nn.ReLU(),
-            nn.Conv2d(512, 512, kernel_size=3),
-            nn.ReLU(),
-            nn.Conv2d(512, 512, kernel_size=3),
-            # nn.BatchNorm2d(512),            
-            nn.ReLU(),
-            nn.MaxPool2d(3, stride=2),
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(2048, 4096),
-            nn.Dropout(),
-            nn.Linear(4096, 2048),
-            nn.Dropout(),
-            nn.Linear(2048, 51),
-            # nn.Softmax(dim=1)            
-            
-        )
-        
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-
-        return x
-
-
+# pre-processing
+Preprocess()
 
 # 신경망 구성
-net = Net().to(device)
-print(net)
+spatialnet = SpatialNet().to(device)
+temporalnet = TemporalNet().to(device)
+
+print(spatialnet)
+print(temporalnet)
 
 
 # 신경망 파라매터 로드
-if os.path.isfile(pretrained+params):
-    net.load_state_dict(torch.load(pretrained))
+if os.path.isfile(pretrained+params_spatial):
+    net.load_state_dict(torch.load(pretrained+params_spatial))
+    net.load_state_dict(torch.load(pretrained+params_temporal))
     print('\n[*]parameters loaded')
 
 
 # loss function, optimizer 정의
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=lr, momentum=momentum)
-print(optimizer)
+optim_rgb = optim.SGD(spatialnet.parameters(), lr=lr, momentum=momentum)
+optim_opt = optim.SGD(temporalnet.parameters(), lr=lr, momentum=momentum)
+print(optim_rgb)
 
 
 # 데이터 전처리 정의
@@ -103,46 +74,108 @@ transform = transforms.Compose([
 
 # 신경망 학습
 def train():
-    hmdb51 = HMDB51(transform=transform,
-                    train=True)
 
-    dataloader = DataLoader(dataset=hmdb51,
+    # RGB 이미지 데이터 로더
+    rgb_data = datasets.ImageFolder(root='data/image/',
+                                    transform=transform)
+    
+    spatial_loader = DataLoader(dataset=rgb_data,
+                                batch_size=batch_size,
+                                num_workers=2,
+                                shuffle=True)
+
+    # optical flow 데이터 로더
+    optical_data = datasets.ImageFolder(root='data/optical/',
+                                       transform=transform)
+    
+    temporal_loader = DataLoader(dataset=optical_data,
                             batch_size=batch_size,
                             num_workers=2,
                             shuffle=True)
 
+
     for epoch in range(epochs):
         running_loss = 0.0
-
-        for i, (img, target) in enumerate(dataloader):
+        
+        for i, ((img, rgb_target), (optical, opt_target)) in enumerate(zip(spatial_loader, temporal_loader)):
             img = img.to(device)
-            targets = target.to(device)
+            rgb_target = rgb_target.to(device)
 
-            optimizer.zero_grad()
+            optical = optical.to(device)
+            opt_target = opt_target.to(device)
 
-            outputs = net(img)
-            prediction = torch.max(outputs, 1)[1]
+            optim_rgb.zero_grad()
+            optim_opt.zero_grad()
 
-            loss = criterion(outputs, targets)
+            outputs_spatial = spatialnet(img)
+            pred_spatial = torch.max(outputs_spatial, 1)[1]
+
+            outputs_temporal = temporalnet(optical)
+            pred_temporal = torch.max(outputs_temporal, 1)[1]
+            
+
+            loss_spatial = criterion(outputs_spatial, rgb_target)
+            loss_temporal = criterion(outputs_temporal, opt_target)
+            loss = loss_spatial + loss_temporal
+
             loss.backward()
-            optimizer.step()
+            optim_rgb.step()
+            optim_opt.step()
 
             running_loss += loss.item()
+
             if (i+1) % 100 == 0:
-                print('prediction  : {0} \ntarget      : {1}'.format(prediction, target))
-                print('[epoch : {0:3d}, {1:5d}/{2}] loss : {3:3f}'.format(epoch+1, (i+1)*batch_size, len(hmdb51), running_loss/((i+1)*batch_size)))
-    
+                print('---Spatial---')
+                print('prediction  : {0} \ntarget      : {1}'.format(pred_spatial, rgb_target))
+                print('---Temporal--')
+                print('prediction  : {0} \ntarget      : {1}'.format(pred_temporal, opt_target))
+                print('[epoch : {0:3d}, {1:5d}/{2}] loss : {3:3f}'.format(epoch+1, (i+1)*batch_size, len(optical_data), running_loss/((i+1)*batch_size)))
+                print('') 
     print('Training Finished')
 
 
     # 파라매터 저장
     if not os.path.exists(pretrained):
         os.makedirs(pretrained, exist_ok=True)
-    torch.save(net.state_dict(), pretrained+params)
+    torch.save(spatialnet.state_dict(), pretrained+params_spatial)
+    torch.save(temporalnet.state_dict(), pretrained+params_temporal)
+
+def test():
+    rgb_data = datasets.ImageFolder(root='data/image/',
+                                    transform=transform)
+
+    spatial_loader = DataLoader(dataset=rgb_data,
+                            batch_size=batch_size,
+                            num_workers=2,
+                            shuffle=True)
+    
+    running_loss = 0.0
+    correct = 0
+
+    for i, (img, target) in enumerate(dataloader):
+        img = img.to(device)
+        targets = target.to(device)
+
+        optimizer.zero_grad()
+
+        outputs = net(img)
+        prediction = torch.max(outputs, 1)[1]
+
+        loss = criterion(outputs, targets)
+        running_loss += loss.item()
+        correct += sum(targets.cpu().numpy() == prediction.cpu().numpy())
+        print('prediction   : {0} \ntarget       : {1} \nloss         : {2}'.format(prediction, target, running_loss/(i+1)))
+    print('accuracy     : {}'.format(100*correct/((i+1)*batch_size)))
+    print('Test Finished')
+
+
 
 
 def main():
-    train()
+    if args.test:
+        test()
+    else:
+        train()
 
 if __name__ == '__main__':
     main()
