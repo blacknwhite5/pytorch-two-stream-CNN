@@ -6,8 +6,9 @@ import numpy as np
 
 
 class Preprocess():
-
-    def __init__(self):
+    def __init__(self, ratio=.7):
+        self.ratio = ratio
+        
         labels = sorted(os.listdir(os.path.join(os.getcwd(), 'data/hmdb51_org')))
 
         video_list = []
@@ -18,32 +19,32 @@ class Preprocess():
         label_index = {label : np.array(i) for i, label in enumerate(labels)}
             
         # 데이터 전처리 (video -> image)
-        if not os.path.exists('data/image'):
+        if not os.path.exists('data/train'):
             for label in labels:
-                os.makedirs(os.path.join(os.getcwd(), 'data/image', label), exist_ok=True)
-                os.makedirs(os.path.join(os.getcwd(), 'data/optical', label), exist_ok=True)
-   
-
-#            for videos in video_list:
-#                for i, video in enumerate(videos):
-#                    # train
-#                    if i < round(len(videos)*0.7):
-#                        self.video2frame(video, 'data/image', 'data/optical')
-#
-#                    # test
-#                    else:
-#                        self.video2frame(video, 'data/image', 'data/optical')
+                os.makedirs(os.path.join(os.getcwd(), 'data/train/image', label), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), 'data/test/image', label), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), 'data/train/optical', label), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), 'data/test/optical', label), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), 'data/val/image', label), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), 'data/val/optical', label), exist_ok=True)
+    
 
             for videos in video_list:
                 for i, video in enumerate(videos):
-                    if i < 100:
-                        self.video2frame(video, 'data/image', 'data/optical')
+                    # train
+                    if i < round(len(videos)*self.ratio):
+                        self.video2frame(video, 'data/train/image', 'data/train/optical')
 
-#                    else:
-#                        break
+                    # validation
+                    elif i > round(len(videos)*0.9):
+                        self.video2frame(video, 'data/val/image/', 'data/val/optical/')
+
+                    # test
+                    else:
+                        self.video2frame(video, 'data/test/image', 'data/test/optical')
 
 
-
+    
     def video2frame(self, video, frame_save_path,optical_save_path, count=0):
         '''
             1개의 동영상 파일에서 약 16 프레임씩 이미지(.jpg)로 저장
