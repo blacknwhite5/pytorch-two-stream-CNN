@@ -41,7 +41,7 @@ def train(net_S, net_T, pth):
             # get the inputs
             (img_S, target_S), (img_T, target_T) = data_S, data_T
             img_S, target_S = img_S.cuda(), target_S.cuda()
-            ijg_T, target_T = img_T.cuda(), target_T.cuda()
+            img_T, target_T = img_T.cuda(), target_T.cuda()
 
             # zero the parameter gradients
             optimizer_S.zero_grad()
