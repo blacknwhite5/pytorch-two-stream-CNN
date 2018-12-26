@@ -21,7 +21,8 @@ save_net = 10
 classes = ('brushed_hair', 'cartwheel', 'catch', 'chew', 'clap', 'climb', 'clib_stairs', 'dive', 'draw_sword', 'dribble', 'drink',
            'eat', 'fall_floor', 'fencing', 'flic_flac', 'golf', 'handstand', 'hit', 'hug', 'jump', 'kick', 'kick_ball', 'kiss',
            'laugh', 'pick', 'pour', 'pullup', 'punch', 'push', 'pushup', 'ride_bike', 'ride_horse', 'run', 'shake_hands', 'shoot_ball',
-           'shoot_bow', 'shoot_gun', 'sit', 'situp', 'smile', 'smoke', 'somersault', 'stand', 'swing_baseball', 'sword', 'sword_exercise', 'talk', 'throw', 'turn', 'walk', 'wave')
+           'shoot_bow', 'shoot_gun', 'sit', 'situp', 'smile', 'smoke', 'somersault', 'stand', 'swing_baseball', 'sword', 'sword_exercise',
+           'talk', 'throw', 'turn', 'walk', 'wave')
 
 def imshow(img):
     img = img/2 + 0.5 #unnormalize [-1,1] -> [0,1]
